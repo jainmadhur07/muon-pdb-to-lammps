@@ -1,8 +1,7 @@
 # MUON.py
 
 Converts a protein structure (PDB/CIF) + a rigid-body definition file +
-a GROMACS-style force field directory into a LAMMPS `data_file`, per the
-spec in Prof. Jignesh Prajapati's "Flow of the code" document.
+a GROMACS-style force field directory into a LAMMPS `data_file`.
 
 ## Usage
 
