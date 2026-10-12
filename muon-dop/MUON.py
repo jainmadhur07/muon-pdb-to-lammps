@@ -4,7 +4,11 @@
 Usage:
     python3 MUON.py -pdb new1.pdb -rigid rigid_definitions.dat \
         -ff /path/to/forcefield_dir -box 150 150 150 \
-        -out data_file -log out.log
+        -out data_file -log out.log [-ions]
+
+Runs the full pipeline and writes the final LAMMPS data_file. See
+README.md for details on the pipeline and the assumptions confirmed
+with Prof. Jignesh.
 """
 import sys
 import time
@@ -12,8 +16,12 @@ import time
 from muon import cli
 from muon.structure_reader import (
     read_structure, relabel_chains_and_atoms, group_residues,
+    pad_ions_with_dummy_atoms,
 )
-from muon.forcefield_reader import read_nonbonded_matrix, ResidueDatabase
+from muon.forcefield_reader import (
+    read_nonbonded_matrix, ResidueDatabase, read_ion_resnames,
+    build_ion_vdw_radii,
+)
 from muon.rigid_parser import read_rigid_definitions, apply_rigid_ids
 from muon.writers import write_metadata, write_mass, write_pairs, write_atoms, assemble_data_file
 
@@ -30,22 +38,35 @@ def main(argv=None):
     args = cli.parse_args(argv)
 
     with open(args.log_file, "w") as logfh:
-        log(logfh, "Starting MUON.py")
+        log(logfh, f"Starting MUON.py")
         log(logfh, f"structure={args.structure_file} rigid={args.rigid_file} "
-                    f"ff_dir={args.ff_dir} box={args.box} out={args.out_file}")
+                    f"ff_dir={args.ff_dir} box={args.box} out={args.out_file} ions={args.ions}")
 
         atoms = read_structure(args.structure_file)
         log(logfh, f"Read {len(atoms)} atoms from {args.structure_file}")
-
-        atoms = relabel_chains_and_atoms(atoms)
-        chains_seen = sorted(set(a["new_chain"] for a in atoms))
-        log(logfh, f"Relabeled chains: {chains_seen}")
 
         nonbonded = read_nonbonded_matrix(args.ff_dir)
         log(logfh, f"Read {len(nonbonded)} atom types from ffnonbonded.itp")
         fftype_to_id = {row["name"]: row["id"] for row in nonbonded}
 
         resdb = ResidueDatabase(args.ff_dir)
+
+        # -ions: pad every ion with two dummy MW atoms (one on each side,
+        # shifted by the ion's van der Waals radius) so its rigid body has
+        # the 3 atoms LAMMPS requires. Must happen BEFORE chain relabeling
+        # and renumbering, so the new dummy atoms get included like any
+        # other atom.
+        if args.ions:
+            ion_resnames = read_ion_resnames(args.ff_dir)
+            ion_vdw_radii = build_ion_vdw_radii(ion_resnames, resdb, nonbonded)
+            log(logfh, f"Ion van der Waals radii (Angstrom): {ion_vdw_radii}")
+            n_before = len(atoms)
+            atoms = pad_ions_with_dummy_atoms(atoms, ion_vdw_radii)
+            log(logfh, f"Padded ions with dummy MW atoms: {n_before} -> {len(atoms)} atoms")
+
+        atoms = relabel_chains_and_atoms(atoms)
+        chains_seen = sorted(set(a["new_chain"] for a in atoms))
+        log(logfh, f"Relabeled chains: {chains_seen}")
 
         # Histidine: try HID first, then HIE, then HIP (per residue).
         residues = group_residues(atoms)
@@ -71,7 +92,11 @@ def main(argv=None):
         for atom in atoms:
             key = (atom["new_chain"], atom["resid"])
             try:
-                if key in histidine_blocks:
+                if args.ions and atom["resname"] == "MW":
+                    # Dummy padding atom added for an ion: skip the normal
+                    # rtp lookup entirely, use the MW type directly.
+                    fftype, charge = "MW", 0.0
+                elif key in histidine_blocks:
                     block_name, family = histidine_blocks[key]
                     fftype, charge = resdb.rtp[family][block_name][atom["name"]]
                 else:

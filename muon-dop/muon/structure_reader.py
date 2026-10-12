@@ -87,6 +87,36 @@ def read_structure(path):
     raise ValueError(f"Unrecognized structure file extension: {path}")
 
 
+def pad_ions_with_dummy_atoms(atoms, ion_vdw_radii):
+    """-ions mode: for every atom whose residue name is a known ion,
+    insert two extra dummy atoms immediately after it, one shifted -vdw
+    and one shifted +vdw along x (y/z unchanged), so the ion's rigid body
+    has the 3 atoms LAMMPS requires. The dummy atoms copy every field
+    from the ion atom except "name" and "resname", both of which become
+    "MW" -- that's how forcefield_reader later knows to skip the normal
+    rtp lookup for these two and assign them atom type MW / charge 0
+    directly (confirmed with Prof. Jignesh: both the atom name and the
+    residue name should be changed to MW, not just the atom name).
+
+    Call this right after read_structure, before relabel_chains_and_atoms
+    (so the dummies get included in the final numbering/chain relabeling
+    like any other atom).
+    """
+    padded = []
+    for atom in atoms:
+        padded.append(atom)
+        radius = ion_vdw_radii.get(atom["resname"])
+        if radius is None:
+            continue
+        for sign in (-1, +1):
+            dummy = dict(atom)
+            dummy["name"] = "MW"
+            dummy["resname"] = "MW"
+            dummy["x"] = atom["x"] + sign * radius
+            padded.append(dummy)
+    return padded
+
+
 def group_residues(atoms):
     """Group atoms into residues keyed by (new_chain, resid), in order of
     first appearance. Call after relabel_chains_and_atoms."""
