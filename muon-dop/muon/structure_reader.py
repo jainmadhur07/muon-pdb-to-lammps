@@ -87,6 +87,26 @@ def read_structure(path):
     raise ValueError(f"Unrecognized structure file extension: {path}")
 
 
+def pad_ions_with_dummy_atoms(atoms, ion_vdw_radii):
+    """-ions mode: for every ion atom, insert two dummy atoms right after
+    it (shifted -vdw and +vdw along x) so its rigid body has >=3 atoms.
+    Dummies get name/resname "MW" so forcefield_reader skips rtp lookup
+    for them. Call before relabel_chains_and_atoms."""
+    padded = []
+    for atom in atoms:
+        padded.append(atom)
+        radius = ion_vdw_radii.get(atom["resname"])
+        if radius is None:
+            continue
+        for sign in (-1, +1):
+            dummy = dict(atom)
+            dummy["name"] = "MW"
+            dummy["resname"] = "MW"
+            dummy["x"] = atom["x"] + sign * radius
+            padded.append(dummy)
+    return padded
+
+
 def group_residues(atoms):
     """Group atoms into residues keyed by (new_chain, resid), in order of
     first appearance. Call after relabel_chains_and_atoms."""

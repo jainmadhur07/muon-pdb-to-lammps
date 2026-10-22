@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+metadata.dat
+mass.dat
+pairs.dat
+atom.dat
+sample_data/generated_data_file
+sample_data/out.log
+sample_data/gen_atoms.txt
+sample_data/ref_atoms.txt
+.DS_Store

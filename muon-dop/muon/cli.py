@@ -9,7 +9,7 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "-pdb", required=True, dest="structure_file",
-        help="Input structure file in PDB or CIF format (e.g. new2.pdb)",
+        help="Input structure file in PDB or CIF format (e.g. new1.pdb)",
     )
     parser.add_argument(
         "-rigid", required=True, dest="rigid_file",
@@ -31,5 +31,9 @@ def parse_args(argv=None):
     parser.add_argument(
         "-log", default="out.log", dest="log_file",
         help="Name of the log file to write (default: out.log)",
+    )
+    parser.add_argument(
+        "-ions", action="store_true", dest="ions",
+        help="Pad each ion with two dummy MW atoms so its rigid body has >=3 atoms",
     )
     return parser.parse_args(argv)
