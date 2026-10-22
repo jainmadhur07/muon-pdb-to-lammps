@@ -4,7 +4,7 @@
 Usage:
     python3 MUON.py -pdb new1.pdb -rigid rigid_definitions.dat \
         -ff /path/to/forcefield_dir -box 150 150 150 \
-        -out data_file -log out.log [-ions]
+        -out data_file -log out.log [-ions] [-temperature T]
 """
 import sys
 import time
@@ -19,7 +19,11 @@ from muon.forcefield_reader import (
     build_ion_vdw_radii,
 )
 from muon.rigid_parser import read_rigid_definitions, apply_rigid_ids
-from muon.writers import write_metadata, write_mass, write_pairs, write_atoms, assemble_data_file
+from muon.bonded_reader import read_bonded_matrices
+from muon.writers import (
+    write_metadata, write_mass, write_pairs, write_atoms, assemble_data_file,
+    write_bonds, write_angles, write_dihedrals,
+)
 
 
 def log(fh, message):
@@ -44,6 +48,14 @@ def main(argv=None):
         nonbonded = read_nonbonded_matrix(args.ff_dir)
         log(logfh, f"Read {len(nonbonded)} atom types from ffnonbonded.itp")
         fftype_to_id = {row["name"]: row["id"] for row in nonbonded}
+
+        if args.temperature is not None:
+            bonds, angles, dihedrals = read_bonded_matrices(args.ff_dir, args.temperature)
+            write_bonds("bonds.dat", bonds)
+            write_angles("angles.dat", angles)
+            write_dihedrals("dihedrals.dat", dihedrals)
+            log(logfh, f"T={args.temperature}: wrote bonds.dat ({len(bonds)}), "
+                       f"angles.dat ({len(angles)}), dihedrals.dat ({len(dihedrals)})")
 
         resdb = ResidueDatabase(args.ff_dir)
 

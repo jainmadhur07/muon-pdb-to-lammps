@@ -36,4 +36,8 @@ def parse_args(argv=None):
         "-ions", action="store_true", dest="ions",
         help="Pad each ion with two dummy MW atoms so its rigid body has >=3 atoms",
     )
+    parser.add_argument(
+        "-temperature", type=float, default=None, dest="temperature",
+        help="Temperature (K); enables flexible-model bonded parameters",
+    )
     return parser.parse_args(argv)

@@ -41,6 +41,28 @@ def write_pairs(path, nonbonded_matrix):
         fh.write("\n")
 
 
+def _write_coeffs(path, header, rows):
+    with open(path, "w") as fh:
+        fh.write(f"{header}\n\n")
+        for cols in rows:
+            fh.write(" ".join(f"{c:g}" if isinstance(c, float) else str(c)
+                              for c in cols) + "\n")
+        fh.write("\n")
+
+
+def write_bonds(path, bonds):
+    _write_coeffs(path, "Bond Coeffs", [(b["id"], b["kb"], b["b0"]) for b in bonds])
+
+
+def write_angles(path, angles):
+    _write_coeffs(path, "Angle Coeffs", [(a["id"], a["cth"], a["th0"]) for a in angles])
+
+
+def write_dihedrals(path, dihedrals):
+    _write_coeffs(path, "Dihedral Coeffs",
+                  [(d["id"], d["k"], d["n"], d["d"], d["weight"]) for d in dihedrals])
+
+
 def write_atoms(path, atoms, box_center_shift=None):
     """atom.dat: 'Atoms' header, then 7 columns per atom:
     atom_number  rigid_body_id  atom_type_id  charge  x  y  z
