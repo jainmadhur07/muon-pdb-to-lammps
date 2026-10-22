@@ -2,14 +2,25 @@
 LAMMPS data_file, matching the reference file's format exactly."""
 
 
-def write_metadata(path, header_comment, n_atoms, n_atom_types, box):
-    """metadata.dat: header comment, atom count, atom type count, box bounds."""
-    bx, by, bz = box
+def write_metadata(path, header_comment, n_atoms):
+    """metadata.dat: header comment and atom count."""
     with open(path, "w") as fh:
         if header_comment:
             fh.write(f"{header_comment}\n\n")
         fh.write(f"{n_atoms} atoms\n\n")
-        fh.write(f"{n_atom_types}  atom types\n\n")
+
+
+def write_metadata_2(path, n_atom_types, box, extra_types=None):
+    """metadata_2.dat: type counts, then box bounds. With extra_types
+    (flexible model, e.g. {"bond": 194}) the lines follow the atom types
+    directly and a single blank line comes after the last one."""
+    bx, by, bz = box
+    with open(path, "w") as fh:
+        fh.write(f"{n_atom_types}  atom types\n")
+        if extra_types:
+            for name, count in extra_types.items():
+                fh.write(f"{count} {name} types\n")
+        fh.write("\n")
         fh.write(f"0 {bx:g} xlo xhi\n")
         fh.write(f"0 {by:g} ylo yhi\n")
         fh.write(f"0 {bz:g} zlo zhi\n\n")
@@ -56,6 +67,11 @@ def write_bonds(path, bonds):
 
 def write_angles(path, angles):
     _write_coeffs(path, "Angle Coeffs", [(a["id"], a["cth"], a["th0"]) for a in angles])
+
+
+def write_impropers(path, impropers):
+    _write_coeffs(path, "Improper Coeffs",
+                  [(m["id"], m["k"], m["d"], m["n"]) for m in impropers])
 
 
 def write_dihedrals(path, dihedrals):

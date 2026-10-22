@@ -21,8 +21,8 @@ from muon.forcefield_reader import (
 from muon.rigid_parser import read_rigid_definitions, apply_rigid_ids
 from muon.bonded_reader import read_bonded_matrices
 from muon.writers import (
-    write_metadata, write_mass, write_pairs, write_atoms, assemble_data_file,
-    write_bonds, write_angles, write_dihedrals,
+    write_metadata, write_metadata_2, write_mass, write_pairs, write_atoms, assemble_data_file,
+    write_bonds, write_angles, write_impropers, write_dihedrals,
 )
 
 
@@ -49,13 +49,19 @@ def main(argv=None):
         log(logfh, f"Read {len(nonbonded)} atom types from ffnonbonded.itp")
         fftype_to_id = {row["name"]: row["id"] for row in nonbonded}
 
+        extra_types = None
+        extra_files = []
         if args.temperature is not None:
-            bonds, angles, dihedrals = read_bonded_matrices(args.ff_dir, args.temperature)
+            bonds, angles, impropers, dihedrals = read_bonded_matrices(
+                args.ff_dir, args.temperature)
             write_bonds("bonds.dat", bonds)
             write_angles("angles.dat", angles)
+            write_impropers("impropers.dat", impropers)
             write_dihedrals("dihedrals.dat", dihedrals)
-            log(logfh, f"T={args.temperature}: wrote bonds.dat ({len(bonds)}), "
-                       f"angles.dat ({len(angles)}), dihedrals.dat ({len(dihedrals)})")
+            extra_types = {"bond": len(bonds), "angle": len(angles),
+                           "improper": len(impropers), "dihedral": len(dihedrals)}
+            extra_files = ["bonds.dat", "angles.dat", "impropers.dat", "dihedrals.dat"]
+            log(logfh, f"T={args.temperature}: wrote bonded files {extra_types}")
 
         resdb = ResidueDatabase(args.ff_dir)
 
@@ -139,10 +145,9 @@ def main(argv=None):
             "metadata.dat",
             header_comment="# LAMMPS data file for rigid bodies",
             n_atoms=len(atoms),
-            n_atom_types=n_atom_types,
-            box=args.box,
         )
-        log(logfh, "Wrote metadata.dat")
+        write_metadata_2("metadata_2.dat", n_atom_types, args.box, extra_types)
+        log(logfh, "Wrote metadata.dat and metadata_2.dat")
 
         write_mass("mass.dat", nonbonded)
         write_pairs("pairs.dat", nonbonded)
@@ -159,7 +164,10 @@ def main(argv=None):
         write_atoms("atom.dat", atoms, box_center_shift=centroid)
         log(logfh, "Wrote atom.dat")
 
-        assemble_data_file(args.out_file, ["metadata.dat", "mass.dat", "pairs.dat", "atom.dat"])
+        assemble_data_file(args.out_file, [
+            "metadata.dat", "metadata_2.dat", "mass.dat", "pairs.dat",
+            *extra_files, "atom.dat",
+        ])
         log(logfh, f"Wrote final data file: {args.out_file}")
         log(logfh, "Done.")
 

@@ -9,3 +9,8 @@ sample_data/out.log
 sample_data/gen_atoms.txt
 sample_data/ref_atoms.txt
 .DS_Store
+metadata_2.dat
+bonds.dat
+angles.dat
+impropers.dat
+dihedrals.dat

@@ -1,5 +1,5 @@
-"""Read ffbonded.itp -> bonds / angles / dihedrals matrices (lists of dicts),
-scaled for the -temperature flexible model."""
+"""Read ffbonded.itp -> bonds / angles / impropers / dihedrals matrices (lists
+of dicts), scaled for the -temperature flexible model."""
 import math
 import os
 
@@ -15,9 +15,9 @@ def _temperature_factor(temperature):
 
 
 def _read_sections(ff_dir):
-    """Returns {"bonds": [...], "angles": [...], "dihedrals": [...]} of raw
-    (atom_types, numeric_tokens). Improper dihedrals are skipped for now."""
-    data = {"bonds": [], "angles": [], "dihedrals": []}
+    """Returns {"bonds", "angles", "impropers", "dihedrals"} -> raw
+    (atom_types, numeric_tokens) rows."""
+    data = {"bonds": [], "angles": [], "impropers": [], "dihedrals": []}
     current = None
     with open(os.path.join(ff_dir, "ffbonded.itp")) as fh:
         for raw in fh:
@@ -25,7 +25,7 @@ def _read_sections(ff_dir):
             if raw.lstrip().startswith("["):
                 name = stripped.strip("[] ").strip()
                 if name == "dihedraltypes" and "improper" in raw:
-                    current = None
+                    current = ("impropers", 4)
                 else:
                     current = SECTIONS.get(name)
                 continue
@@ -38,7 +38,7 @@ def _read_sections(ff_dir):
 
 
 def read_bonded_matrices(ff_dir, temperature):
-    """Returns (bonds, angles, dihedrals): lists of dicts, IDs numbered 1..N."""
+    """Returns (bonds, angles, impropers, dihedrals): lists of dicts, IDs 1..N."""
     raw = _read_sections(ff_dir)
     factor = _temperature_factor(temperature)
 
@@ -54,11 +54,24 @@ def read_bonded_matrices(ff_dir, temperature):
         angles.append({"id": i, "types": types,
                        "cth": (cth / 8.368) * factor, "th0": th0})
 
+    impropers = []
+    for i, (types, vals) in enumerate(raw["impropers"], start=1):
+        d, k, n = float(vals[0]), float(vals[1]), int(vals[2])
+        if d == 0:
+            d = 1
+        elif d == 180:
+            d = -1
+        else:
+            raise ValueError(
+                f"unknown improper type is observed, set the parameters: {types} phase={d}")
+        k = factor if k == 0 else (k / 4.184) * factor
+        impropers.append({"id": i, "types": types, "k": k, "d": d, "n": n})
+
     dihedrals = []
     for i, (types, vals) in enumerate(raw["dihedrals"], start=1):
         d, k, n = float(vals[0]), float(vals[1]), int(vals[2])
         k = factor if k == 0 else (k / 4.184) * factor
         dihedrals.append({"id": i, "types": types, "k": k, "n": n,
-                          "d": int(round(d)), "weight": 1})
+                          "d": int(math.floor(d + 0.5)), "weight": 1})
 
-    return bonds, angles, dihedrals
+    return bonds, angles, impropers, dihedrals
