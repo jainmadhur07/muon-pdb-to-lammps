@@ -106,17 +106,62 @@ def _read_rtp_blocks(path):
     return blocks
 
 
+def _read_tdb(path):
+    """Parse a GROMACS .tdb file -> {name: {"replace": {atom: (type, charge)},
+    "add": [(count, base_name, type, charge)]}}  (CHARMM terminal patches)."""
+    out = {}
+    if not os.path.exists(path):
+        return out
+    cur = None
+    section = None
+    pending = None
+    with open(path) as fh:
+        for raw in fh:
+            line = raw.split(";", 1)[0].strip()
+            if not line:
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                name = line[1:-1].strip()
+                if name in ("delete", "replace", "add", "impropers", "bonds",
+                            "angles", "dihedrals", "cmap"):
+                    section = name
+                    pending = None
+                else:
+                    cur = out.setdefault(name, {"replace": {}, "add": []})
+                    section = None
+                continue
+            if cur is None:
+                continue
+            t = line.split()
+            if section == "replace" and len(t) >= 4:
+                cur["replace"][t[0]] = (t[1], float(t[3]))
+            elif section == "add":
+                if pending is None:
+                    pending = (int(t[0]), t[2])   # count, base atom name
+                else:
+                    cur["add"].append((pending[0], pending[1], t[0], float(t[2])))
+                    pending = None
+    return out
+
+
+# PDB names CHARMM-GUI writes for terminal atoms -> GROMACS add-atom names
+_NTER_ADDED = {"HT1": 1, "HT2": 2, "HT3": 3, "H1": 1, "H2": 2, "H3": 3}
+_CTER_ADDED = {"OT1": 1, "OT2": 2, "OXT": 2}
+
+
 class ResidueDatabase:
     """Loads aminoacids/dna/rna .rtp + .r2b files and resolves
     (resname, atomname, is_nterm, is_cterm) -> (fftype, charge)."""
 
-    FAMILIES = ["aminoacids", "dna", "rna"]
+    FAMILIES = ["aminoacids", "carb", "solvent", "dna", "rna"]
     HISTIDINE_TRY_ORDER = ["HISD", "HISE", "HISH"]  # try HID, then HIE, then HIP
 
     def __init__(self, ff_dir):
         self.ff_dir = ff_dir
         self.r2b = {}
         self.rtp = {}
+        self.ntdb = _read_tdb(os.path.join(ff_dir, "aminoacids.n.tdb"))
+        self.ctdb = _read_tdb(os.path.join(ff_dir, "aminoacids.c.tdb"))
         for family in self.FAMILIES:
             self.r2b[family] = _read_r2b(os.path.join(ff_dir, f"{family}.r2b"))
             self.rtp[family] = _read_rtp_blocks(os.path.join(ff_dir, f"{family}.rtp"))
@@ -131,13 +176,47 @@ class ResidueDatabase:
             return entry["cter"]
         return entry["main"] if entry["main"] != "-" else resname
 
+    def _terminal_override(self, resname, atomname, is_nterm, is_cterm):
+        """CHARMM terminal patches (NH3+ / GLY-NH3+ / PRO-NH2+ / COO-):
+        returns (type, charge) when the patch replaces or adds this atom."""
+        if is_nterm:
+            if resname == "GLY":
+                pname = "GLY-NH3+"
+            elif resname == "PRO":
+                pname = "PRO-NH2+"
+            else:
+                pname = "NH3+"
+            patch = self.ntdb.get(pname)
+            if patch:
+                if atomname in patch["replace"]:
+                    return patch["replace"][atomname]
+                if atomname in _NTER_ADDED:
+                    for cnt, base, typ, chg in patch["add"]:
+                        if _NTER_ADDED[atomname] <= cnt:
+                            return typ, chg
+        if is_cterm:
+            patch = self.ctdb.get("COO-")
+            if patch:
+                if atomname in patch["replace"]:
+                    return patch["replace"][atomname]
+                if atomname in _CTER_ADDED:
+                    for cnt, base, typ, chg in patch["add"]:
+                        return typ, chg
+        return None
+
     def lookup(self, resname, atomname, is_nterm, is_cterm):
         """Returns (fftype, charge, family) or raises LookupError."""
+        if resname == "BGLN":   # GlcNAc is written BGLCNA in carb.rtp; PDB has 4-char names
+            resname = "BGLCNA"
         for family in self.FAMILIES:
             block_name = self._resolve_block_name(family, resname, is_nterm, is_cterm)
             block = self.rtp[family].get(block_name)
             if block is None:
                 continue
+            if family == "aminoacids":
+                hit = self._terminal_override(resname, atomname, is_nterm, is_cterm)
+                if hit is not None:
+                    return hit[0], hit[1], family
             if atomname in block:
                 fftype, charge = block[atomname]
                 return fftype, charge, family
@@ -171,7 +250,11 @@ class ResidueDatabase:
         """Force field atom type for an ion, from its one-atom block in
         aminoacids.rtp (atom name doesn't always match residue name,
         e.g. IB+ -> IB)."""
-        block = self.rtp["aminoacids"].get(ion_resname)
+        block = None
+        for fam in self.FAMILIES:
+            block = self.rtp[fam].get(ion_resname)
+            if block:
+                break
         if not block:
             raise LookupError(
                 f"Ion residue '{ion_resname}' not found as its own block "
@@ -192,7 +275,10 @@ def build_ion_vdw_radii(ion_resnames, resdb, nonbonded_matrix):
     sigma_by_fftype = {row["name"]: row["sigma_nm"] for row in nonbonded_matrix}
     radii = {}
     for ion_resname in ion_resnames:
-        fftype = resdb.ion_fftype(ion_resname)
+        try:
+            fftype = resdb.ion_fftype(ion_resname)
+        except LookupError:
+            continue  # ions.itp lists many ions absent from the rtp files
         if fftype not in sigma_by_fftype:
             raise LookupError(
                 f"Ion '{ion_resname}' has force field type '{fftype}', "

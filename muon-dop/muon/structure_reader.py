@@ -13,7 +13,7 @@ def read_pdb(path):
             atoms.append({
                 "serial": int(line[6:11]),
                 "name": line[12:16].strip(),
-                "resname": line[17:20].strip(),
+                "resname": line[17:21].strip(),
                 "chain": line[21:22].strip(),
                 "resid": int(line[22:26]),
                 "x": float(line[30:38]),

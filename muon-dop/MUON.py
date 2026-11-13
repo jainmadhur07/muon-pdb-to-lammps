@@ -18,6 +18,7 @@ from muon.forcefield_reader import (
     read_nonbonded_matrix, ResidueDatabase, read_ion_resnames,
     build_ion_vdw_radii,
 )
+from muon.patches import apply_patches
 from muon.rigid_parser import read_rigid_definitions, apply_rigid_ids
 from muon.bonded_reader import read_bonded_matrices
 from muon.writers import (
@@ -127,6 +128,12 @@ def main(argv=None):
                 )
                 continue
             atom["atom_type_id"] = fftype_to_id[fftype]
+
+        if not not_found:
+            counts = apply_patches(atoms, residues, resdb, log)
+            log(logfh, f"CHARMM patches applied (detected from geometry): {counts}")
+            for a in atoms:  # patches change atom types, so refresh the type ids
+                a["atom_type_id"] = fftype_to_id[a["fftype"]]
 
         if not_found:
             for msg in not_found:
