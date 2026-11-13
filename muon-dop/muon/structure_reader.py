@@ -19,8 +19,15 @@ def read_pdb(path):
                 "x": float(line[30:38]),
                 "y": float(line[38:46]),
                 "z": float(line[46:54]),
+                "occ": _optional_float(line[54:60]),
+                "bfac": _optional_float(line[60:66]),
             })
     return atoms
+
+
+def _optional_float(text):
+    text = text.strip()
+    return float(text) if text else None
 
 
 def read_cif(path):

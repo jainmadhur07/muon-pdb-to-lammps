@@ -23,7 +23,7 @@ from muon.rigid_parser import read_rigid_definitions, apply_rigid_ids
 from muon.bonded_reader import read_bonded_matrices
 from muon.writers import (
     write_metadata, write_metadata_2, write_mass, write_pairs, write_atoms, assemble_data_file,
-    write_bonds, write_angles, write_impropers, write_dihedrals,
+    write_pdb, write_bonds, write_angles, write_impropers, write_dihedrals,
 )
 
 
@@ -176,6 +176,9 @@ def main(argv=None):
             *extra_files, "atom.dat",
         ])
         log(logfh, f"Wrote final data file: {args.out_file}")
+
+        write_pdb(f"{args.out_file}.pdb", atoms)
+        log(logfh, f"Wrote PDB file: {args.out_file}.pdb")
         log(logfh, "Done.")
 
 

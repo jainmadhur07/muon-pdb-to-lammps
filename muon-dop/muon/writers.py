@@ -105,3 +105,22 @@ def assemble_data_file(out_path, part_paths):
             with open(part) as part_fh:
                 out_fh.write(part_fh.read())
         out_fh.write("\n")
+
+
+def write_pdb(path, atoms):
+    """PDB (columns up to temperature factor) from the atoms matrix, using the
+    original input coordinates. Serial wraps 99999 -> 0, chain trimmed to one
+    character, missing occupancy / B-factor written as 1.00."""
+    with open(path, "w") as fh:
+        for a in atoms:
+            name = a["name"] if len(a["name"]) == 4 else " " + a["name"].ljust(3)
+            resname = a["resname"] if len(a["resname"]) == 4 else a["resname"].rjust(3) + " "
+            chain = (a["chain"] or " ")[0]
+            occ = a.get("occ")
+            bfac = a.get("bfac")
+            fh.write(
+                f"ATOM  {a['new_serial'] % 100000:5d} {name} {resname}{chain}"
+                f"{a['resid'] % 10000:4d}    "
+                f"{a['x']:8.3f}{a['y']:8.3f}{a['z']:8.3f}"
+                f"{1.0 if occ is None else occ:6.2f}{1.0 if bfac is None else bfac:6.2f}\n"
+            )

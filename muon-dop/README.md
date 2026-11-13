@@ -43,6 +43,15 @@ tested against small hand-built structures (see "Ion inclusion" below)
 and matches the one worked example in his spec (a K+ ion's van der Waals
 radius comes out to 1.519 A, exactly as in his document).
 
+## PDB output
+
+After writing the data file, MUON.py also writes `<out>.pdb` (e.g.
+`data_file.pdb`) from the final atoms matrix, using the original input
+coordinates and including the dummy MW ion atoms, for visualization.
+Atom serials wrap 99999 -> 0, chain IDs are trimmed to one character,
+residue ids are written modulo 10000, and missing occupancy / B-factor
+are written as 1.00.
+
 ## Project layout
 
 ```
